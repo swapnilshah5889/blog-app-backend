@@ -1,39 +1,55 @@
-/**
- * Welcome to Cloudflare Workers! This is your first worker.
- *
- * - Run `npm run dev` in your terminal to start a development server
- * - Open a browser tab at http://localhost:8787/ to see your worker in action
- * - Run `npm run deploy` to publish your worker
- *
- * Learn more at https://developers.cloudflare.com/workers/
- */
-
-export interface Env {
-	// Example binding to KV. Learn more at https://developers.cloudflare.com/workers/runtime-apis/kv/
-	// MY_KV_NAMESPACE: KVNamespace;
-	//
-	// Example binding to Durable Object. Learn more at https://developers.cloudflare.com/workers/runtime-apis/durable-objects/
-	// MY_DURABLE_OBJECT: DurableObjectNamespace;
-	//
-	// Example binding to R2. Learn more at https://developers.cloudflare.com/workers/runtime-apis/r2/
-	// MY_BUCKET: R2Bucket;
-	//
-	// Example binding to a Service. Learn more at https://developers.cloudflare.com/workers/runtime-apis/service-bindings/
-	// MY_SERVICE: Fetcher;
-	//
-	// Example binding to a Queue. Learn more at https://developers.cloudflare.com/queues/javascript-apis/
-	// MY_QUEUE: Queue;
-}
 import { Hono } from 'hono'
+import { PrismaClient } from '@prisma/client/edge'
+import { withAccelerate } from '@prisma/extension-accelerate';
 
-const app = new Hono();
+import { sign } from 'hono/jwt'
+
+const app = new Hono<{
+	Bindings:{
+		DATASOURCE_URL:string,
+		JWT_TOKEN:string
+	}
+}>
+();
 
 app.get('/', (c) => {
 	return c.text("hello world!");
 });
 
-app.get('/api/v1/signup', (c) => {
-	return c.text("signup");
+app.get('/api/v1/signup', async (c) => {
+	const prisma = new PrismaClient({
+		datasourceUrl: c.env.DATASOURCE_URL
+	}).$extends(withAccelerate());
+
+	const body = await c.req.json();
+
+	let user = await prisma.user.findUnique({
+		where: {
+			email:body.email
+		}
+	})
+	
+	if(!user) {
+		user = await prisma.user.create({
+			data: {
+				email: body.email,
+				password: body.password
+			}
+		});
+	}
+	else {
+		return c.json({msg:"User already exists!"})
+	}
+
+	const payload = {
+		id: user.id,
+		email: user.email,
+		name: user.name
+	}
+	const token = await sign(payload, c.env.JWT_TOKEN)
+	return c.json({
+		jwt:token
+	});
 });
 
 export default app;
