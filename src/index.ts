@@ -24,9 +24,16 @@ export interface Env {
 	// Example binding to a Queue. Learn more at https://developers.cloudflare.com/queues/javascript-apis/
 	// MY_QUEUE: Queue;
 }
+import { Hono } from 'hono'
 
-export default {
-	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-		return new Response('Hello World!');
-	},
-};
+const app = new Hono();
+
+app.get('/', (c) => {
+	return c.text("hello world!");
+});
+
+app.get('/api/v1/signup', (c) => {
+	return c.text("signup");
+});
+
+export default app;
